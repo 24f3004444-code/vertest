@@ -1,42 +1,40 @@
+# api/index.py
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict
-import numpy as np
+from typing import List
 import json
-from fastapi.middleware.cors import CORSMiddleware
+import numpy as np
 
-# Define the data model for the POST request body
-class TelemetryRequest(BaseModel):
+app = FastAPI()
+
+# Define the request body format using Pydantic
+class MetricsRequest(BaseModel):
     regions: List[str]
     threshold_ms: int
 
-# Create FastAPI app
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all HTTP methods
-    allow_headers=["*"],  # Allows all headers
-)
-
-
-# Simulate getting telemetry data for the regions
-def get_telemetry_data_for_region(region: str) -> List[Dict]:
-    sample_data = json.load("q-vercel-latency.json")
-    return sample_data.get(region, [])
-
-# Calculate per-region metrics
-def calculate_metrics(data: List[Dict], threshold_ms: int):
-    latencies = [entry['latency_ms'] for entry in data]
-    uptimes = [entry['uptime_percent'] for entry in data]
+# Function to load telemetry data (from the api/ folder)
+def load_telemetry_data(file_name="q-vercel-latency.json"):
+    with open(file_name, "r") as file:
+        telemetry_data = json.load(file)
     
+    return telemetry_data
+
+# Function to compute metrics
+def compute_metrics(data, threshold_ms):
+    # Compute average latency
+    latencies = [entry["latency"] for entry in data]
     avg_latency = np.mean(latencies)
+
+    # Compute p95 latency (95th percentile)
     p95_latency = np.percentile(latencies, 95)
+
+    # Compute average uptime
+    uptimes = [entry["uptime"] for entry in data]
     avg_uptime = np.mean(uptimes)
+
+    # Count breaches (latency above the threshold)
     breaches = sum(1 for latency in latencies if latency > threshold_ms)
-    
+
     return {
         "avg_latency": avg_latency,
         "p95_latency": p95_latency,
@@ -44,16 +42,34 @@ def calculate_metrics(data: List[Dict], threshold_ms: int):
         "breaches": breaches
     }
 
-# Define POST endpoint to receive telemetry data and return metrics
+# Endpoint to process the POST request
 @app.post("/metrics")
-async def get_metrics(request: TelemetryRequest):
-    metrics_per_region = {}
+async def get_metrics(request: MetricsRequest):
+    try:
+        # Load telemetry data
+        telemetry_data = load_telemetry_data()
 
-    # For each region, get the telemetry data and calculate metrics
-    for region in request.regions:
-        data = get_telemetry_data_for_region(region)
-        if not data:
-            raise HTTPException(status_code=404, detail=f"No data found for region {region}")
-        metrics_per_region[region] = calculate_metrics(data, request.threshold_ms)
-    
-    return metrics_per_region
+        # Prepare the result
+        result = {}
+        for region in request.regions:
+            if region not in telemetry_data:
+                raise HTTPException(status_code=404, detail=f"Region {region} not found")
+            region_data = telemetry_data[region]
+            region_metrics = compute_metrics(region_data, request.threshold_ms)
+            result[region] = region_metrics
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+# Optional: Enable CORS if testing from the browser
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)

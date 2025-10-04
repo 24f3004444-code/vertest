@@ -14,8 +14,7 @@ class MetricsRequest(BaseModel):
 
 # Function to load telemetry data (from the api/ folder)
 def load_telemetry_data(file_name="q-vercel-latency.json"):
-    with open(file_name, "r") as file:
-        telemetry_data = json.loads('''[
+    telemetry_data = json.loads('''[
   {
     "region": "apac",
     "service": "catalog",

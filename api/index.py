@@ -302,7 +302,7 @@ async def get_metrics(request: MetricsRequest):
         # Prepare the result
         result = {}
         for region in request.regions:
-            if region not in [k["region"] for k in telemetry_data]:
+            if str(region) not in [k["region"] for k in telemetry_data]:
                 raise HTTPException(status_code=404, detail=f"Region {region} not found")
             region_data = [k for k in telemetry_data if k["region"] == region]
             region_metrics = compute_metrics(region_data, request.threshold_ms)

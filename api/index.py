@@ -272,14 +272,14 @@ def load_telemetry_data(file_name="q-vercel-latency.json"):
 # Function to compute metrics
 def compute_metrics(data, threshold_ms):
     # Compute average latency
-    latencies = [entry["latency"] for entry in data]
+    latencies = [entry["latency_ms"] for entry in data]
     avg_latency = np.mean(latencies)
 
     # Compute p95 latency (95th percentile)
     p95_latency = np.percentile(latencies, 95)
 
     # Compute average uptime
-    uptimes = [entry["uptime"] for entry in data]
+    uptimes = [entry["uptime_pct"] for entry in data]
     avg_uptime = np.mean(uptimes)
 
     # Count breaches (latency above the threshold)
@@ -302,9 +302,9 @@ async def get_metrics(request: MetricsRequest):
         # Prepare the result
         result = {}
         for region in request.regions:
-            if region not in telemetry_data:
+            if region not in [k["region"] for k in telemetry_data]:
                 raise HTTPException(status_code=404, detail=f"Region {region} not found")
-            region_data = telemetry_data[region]
+            region_data = [k for k in telemetry_data if k["region"] == region]
             region_metrics = compute_metrics(region_data, request.threshold_ms)
             result[region] = region_metrics
 
